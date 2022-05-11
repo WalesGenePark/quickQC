@@ -8,9 +8,9 @@
 no warnings 'uninitialized';
 
 use Data::Dumper;
-use File::Find::Rule;
-use File::Path;
-use File::Path qw(make_path);
+#use File::Find::Rule;
+#use File::Path;
+#use File::Path qw(make_path);
 use Cwd;
 use List::MoreUtils qw(uniq);
 use Term::ANSIColor;
@@ -37,6 +37,19 @@ sub mildate {
 }
 
 # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+# Settings
+# =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+
+$SLURM_PARTITION="c_compute_cg1";
+$SLURM_ACCOUNT="scw1179";
+$SLURM_CORES=10;
+$SLURM_WALLTIME="0-6:00";
+
+$RUNFASTQC="/data09/QC_pipelines/workflow/runFastQC.sh";
+$RUNFQCOUNT="/data09/QC_pipelines/workflow/runFQcount.sh";
+
+
+# =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 # Process ARGV
 # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 
@@ -53,7 +66,8 @@ sub helpmsg {
 }
 
 $threads = 1;
-$outdir="/data/QC/quick";
+$defaultoutputdir="/data09/QCtest/quickQC";
+$outdir=$defaultoutputdir;
 $DEBUG=0;
 
 GetOptions (
@@ -110,9 +124,9 @@ if($rundir =~ /(\d\d\d\d\d\d)_(\w\d\d\d\d\d)_(\d\d\d\d)_([^_]+)/){
 # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 
 # Output into local directory?
-if($outdir eq "/data/QC/quick"){
+if($outdir eq $defaultoutputdir){
 	use Cwd;
-    $basedir = "/data/QC/quick";
+    $basedir = $defaultoutputdir;
     # Append flowID to output directory
 	if($rundir =~ /(\d\d\d\d\d\d_\w\d\d\d\d\d_\d\d\d\d_[^_\/]+)/){
 	$flowID = $1;
@@ -128,6 +142,9 @@ if($outdir eq "/data/QC/quick"){
 }
 
 
+
+
+
 print "QC output directory ... "; print GREEN "$outqcdir\n";
 
 # Check base directory exists
@@ -140,9 +157,9 @@ if (! -d $outdir) {
 if ($clean) {
 	if (-d "$outqcdir") {
 		print "Deleting existing QC output directory '$outqcdir' ... ";
-		if(rmtree("$outqcdir")) { print GREEN "DONE\n"; }
+		$cmd="rm -R $$outqcdir";
+		if (system($cmd)){ print GREEN "DONE\n"; }
 		else { print RED "ERROR\n"; exit(1); }
-		print "\n";
 	}
 } else {
 	if (-d "$outqcdir") {
@@ -153,6 +170,11 @@ if ($clean) {
 }
 
 
+
+
+
+
+
 # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 # Get list of fastq files
 # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
@@ -160,15 +182,16 @@ if ($clean) {
 print "Finding fastq.gz files in run directory ... ";
 
 # find all the subdirectories of a given directory
-my @subdirs = File::Find::Rule->directory->in( $rundir );
+#my @subdirs = File::Find::Rule->directory->in( $rundir );
 
 # find all the .fastq.gz files in @subdirs
-my @fqfiles = File::Find::Rule->file()
-          ->name( '*.fastq.gz')
-          ->in( @subdirs );
-
-
-@fqfiles = uniq @fqfiles;
+#my @fqfiles = File::Find::Rule->file()
+#          ->name( '*.fastq.gz')
+#          ->in( @subdirs );
+          
+$cmd="find $rundir -name '*.fastq.gz'";
+@fqfiles = `$cmd`;
+chomp(@fqfiles);
 @fqfiles = sort @fqfiles;
 
 $numfq = @fqfiles;
@@ -177,6 +200,7 @@ if($numfq gt 0){
 } else {
 	print RED "... [ERROR] no fastq.gz files found\n";
 }
+
 
 
 # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
@@ -330,17 +354,20 @@ for $lane (@lanes){
 	if (! -d "$lanedir") {
 		print "Creating output directory ... ";
 		print GREEN "$lanedir";
-
-		$num = make_path($lanedir);
-
-		if($num > 0){
-			print " ... ";
-			print GREEN "DONE\n";
-		} else {
+	
+		# Setup output directory
+		$cmd = "mkdir -p $lanedir";
+		system($cmd);
+		
+		if ($? == -1) {
 			print " ... ";
 			print RED "ERROR\n";
 			exit(1);
+		} else {
+		    print " ... ";
+			print GREEN "DONE\n";
 		}
+		
 	}
 }
 
@@ -363,9 +390,13 @@ for $fq (@fqfiles){
 	# Get fastq name
 	$fq =~ /\/\d\d\d\d\d\d_\w\d\d\d\d\d_\d\d\d\d_[^_]+.*\/([^\/]+_\w\d+_\w\d\d\d_\w\d_\d\d\d).fastq.gz$/;
 	$name = $1;
-
+	
 	# Run fqcount
 	#$cmd = "queueit.pl -cpus $threads -name $sample\_fqcount -- 'fqcount $fq > $outqcdir/$lane/$name.yield' >/dev/null 2>&1";
+	#--export=\"fq=$fq,outqcdir=$outqcdir,lane=$lane,name=$name\"
+	$jobname = "$lane-$sample-fqcount";
+
+	$cmd = "sbatch --account=\"$SLURM_ACCOUNT\" --partition=\"$SLURM_PARTITION\" --nodes=1 --ntasks-per-node=1 --cpus-per-task=1 --time=\"$SLURM_WALLTIME\" --error=\"$outqcdir/$jobname.err\" --output=\"$jobname.out\" --export=\"fq=$fq,outqcdir=$outqcdir,lane=$lane,name=$name\" $RUNFQCOUNT";
 	if($DEBUG==1 || $dryrun==1) { print MAGENTA "$cmd\n"; }
 	if($dryrun == 0){
 		if(system($cmd) == 0) { $jobsrun = $jobsrun + 1; }
@@ -374,12 +405,15 @@ for $fq (@fqfiles){
 
 	# Run fastqc
 	#$cmd = "queueit.pl -cpus $threads -name $sample\_fastqc -- fastqc --outdir $outqcdir/$lane $fq >/dev/null 2>&1";
+	#--export=\"fq=$fq,outqcdir=$outqcdir,lane=$lane,name=$name\"
+	$jobname = "$lane-$sample-fastqc";
+
+	$cmd = "sbatch --account=\"$SLURM_ACCOUNT\" --partition=\"$SLURM_PARTITION\" --nodes=1 --ntasks-per-node=1 --cpus-per-task=1 --time=\"$SLURM_WALLTIME\" --error=\"$outqcdir/$jobname.err\" --output=\"$jobname.out\" --export=\"fq=$fq,outqcdir=$outqcdir,lane=$lane,name=$name\" $RUNFASTQC";
 	if($DEBUG==1 || $dryrun==1) { print MAGENTA "$cmd\n"; }
 	if($dryrun == 0){
 		if(system($cmd) == 0) { $jobsrun = $jobsrun + 1; }
 		else { die "System call '$cmd' failed: $!"; }
 	}
-
 
 }
 
