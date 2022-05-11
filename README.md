@@ -15,6 +15,20 @@ DIR=/data09/incoming/220406_M03762_0171_000000000-DFVKK/Data/Intensities/BaseCal
 quickQC -i $DIR
 ```
 
+Settings are found at the top of the file and include:
+
+```
+$SLURM_PARTITION="c_compute_cg1";
+$SLURM_ACCOUNT="scwNNNN";
+$SLURM_CORES=10;
+$SLURM_WALLTIME="0-6:00";
+
+$RUNFASTQC="/data09/QC_pipelines/workflow/runFastQC.sh";
+$RUNFQCOUNT="/data09/QC_pipelines/workflow/runFQcount.sh";
+
+$defaultoutputdir="/data09/QC/quick";
+```
+
 
 ## Run scripts (runFastQC.sh and runFQcount.sh)
 

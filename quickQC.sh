@@ -66,7 +66,7 @@ sub helpmsg {
 }
 
 $threads = 1;
-$defaultoutputdir="/data09/QCtest/quickQC";
+$defaultoutputdir="/data09/QC/quick";
 $outdir=$defaultoutputdir;
 $DEBUG=0;
 
