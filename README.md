@@ -16,6 +16,18 @@ quickQC -i $DIR
 ```
 
 
+## Run scripts (runFastQC.sh and runFQcount.sh)
+
+These files act as the link between the illuminaQC script and the containers with the analysis tools.
+
+System specific changes that might be required the bind paths for singularity to be able to write to various filesystem locations.
+
+```
+singularity run --bind /data09:/data09 /data09/QC_pipelines/workflow/fastqc_v0.11.9.sif --outdir $outqcdir/$lane $fq
+```
+
+
+
 
 ## quickQCreport
 
