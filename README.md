@@ -1,6 +1,6 @@
 ## Overview
 
-Scripts to perform FastQC analysis and count the reads in fastq files
+Scripts to perform FastQC analysis and count the reads in fastq files using slurm scripts running singularity containers for the analysis.
 
 	
 ## quickQC
