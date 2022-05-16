@@ -8,9 +8,9 @@
 no warnings 'uninitialized';
 
 use Data::Dumper;
-use File::Find::Rule;
-use File::Path;
-use File::Path qw(make_path);
+#use File::Find::Rule;
+#use File::Path;
+#use File::Path qw(make_path);
 use Cwd;
 use List::MoreUtils qw(uniq);
 use Term::ANSIColor;
@@ -132,8 +132,8 @@ if($rundir =~ /\/data\/QC\/quick/){
 	$todir =~ s/\/data\/QC\/quick/\/wgp1\/wgp\/sequencing\/QC\/quick/;
 	$cmd = "rsync -a --stats $rundir/ $todir/";
 	#print MAGENTA "$cmd\n";
-	if(system($cmd) == 0) { $jobsrun = $jobsrun + 1; }
-	else { die "System call '$cmd' failed: $!"; }
+	#if(system($cmd) == 0) { $jobsrun = $jobsrun + 1; }
+	#else { die "System call '$cmd' failed: $!"; }
 
 }
 
