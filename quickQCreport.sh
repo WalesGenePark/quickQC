@@ -4,13 +4,11 @@
 
 # Update log
 # Update 04Sep20 - Initial development started
+# Transferred to Ser Cymru cluster May22
 
 no warnings 'uninitialized';
 
 use Data::Dumper;
-#use File::Find::Rule;
-#use File::Path;
-#use File::Path qw(make_path);
 use Cwd;
 use List::MoreUtils qw(uniq);
 use Term::ANSIColor;
@@ -35,6 +33,15 @@ sub mildate {
 	return(ucfirst($retval));
 
 }
+
+# =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+# Settings
+# =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+
+
+$QUICKQCDIR = "/gluster/wgp/wgp/sequencing/QC/quick/";
+$MULTIQC="module load singularity; singularity run --bind /data09:/data09 /data09/QC_pipelines/workflow/multiqc-v1.11.sif";
+$YIELDGRAPH="module load singularity; singularity exec --bind /data09:/data09 --pwd WORKDIR /data09/QC_pipelines/workflow/WGPQC-v1.0.sif yieldgraph";
 
 # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 # Process ARGV
@@ -90,10 +97,11 @@ if (! -d "$rundir") {
 # Find lanes
 # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 
-# find all the subdirectories of a given directory
-my @subdirs = File::Find::Rule->directory()
-			->in( $rundir );
-@subdirs = grep { /Lane\d+$/ } @subdirs;
+$cmd="find $rundir -type d | sed 's/.*\\\///' | grep Lane";
+@subdirs = `$cmd`;
+chomp(@subdirs);
+@subdirs = sort @subdirs;
+
 
 # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 # Run multiQC
@@ -102,9 +110,9 @@ my @subdirs = File::Find::Rule->directory()
 for $dir (@subdirs){
 	chdir $dir;
 	print "Running multiQC on ... "; print GREEN "$dir\n";
-	$cmd = "multiqc -s -d -f -q .";
-	if(system($cmd) == 0) { $jobsrun = $jobsrun + 1; }
-	else { die "System call '$cmd' failed: $!"; }
+	$cmd = "$MULTIQC -s -d -f -q $rundir/$dir";
+	#if(system($cmd) == 0) { $jobsrun = $jobsrun + 1; }
+	#else { die "System call '$cmd' failed: $!"; }
 }
 
 
@@ -115,25 +123,26 @@ for $dir (@subdirs){
 for $dir (@subdirs){
 	chdir $dir;
 	print "Running yieldgraph report on ... "; print GREEN "$dir\n";
-	$cmd = "yieldgraph";
+	$cmd = "$YIELDGRAPH";
+	$cmd =~ s/WORKDIR/$rundir\/$dir/;
+	print($cmd);
 	if(system($cmd) == 0) { $jobsrun = $jobsrun + 1; }
 	else { die "System call '$cmd' failed: $!"; }
 }
+
 
 # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 # Copy data to ARCCA
 # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 
-if($rundir =~ /\/data\/QC\/quick/){
+if($rundir =~ /\/data09\/QC\/quick/){
 	print "Copying data to ARCCA ... ";
 	print GREEN "$rundir\n";
 
-	$todir = $rundir;
-	$todir =~ s/\/data\/QC\/quick/\/wgp1\/wgp\/sequencing\/QC\/quick/;
-	$cmd = "rsync -a --stats $rundir/ $todir/";
+	$cmd = "rsync -a --stats $rundir/ $QUICKQCDIR/";
 	#print MAGENTA "$cmd\n";
-	#if(system($cmd) == 0) { $jobsrun = $jobsrun + 1; }
-	#else { die "System call '$cmd' failed: $!"; }
+	if(system($cmd) == 0) { $jobsrun = $jobsrun + 1; }
+	else { die "System call '$cmd' failed: $!"; }
 
 }
 
@@ -142,11 +151,10 @@ if($rundir =~ /\/data\/QC\/quick/){
 # Update index
 # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 
-$quickqcdir = "/wgp1/wgp/sequencing/QC/quick/";
-chdir $quickqcdir;
+chdir $QUICKQCDIR;
 
 print "Updating quickQC index in ... ";
-print GREEN "$quickqcdir\n";
+print GREEN "$QUICKQCDIR\n";
 
 $cmd = "./createindex.pl";
 if(system($cmd) == 0) { $jobsrun = $jobsrun + 1; }
